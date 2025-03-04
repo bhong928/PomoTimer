@@ -1,6 +1,7 @@
 import { View, Text, TouchableOpacity, StyleSheet } from "react-native";
 import { useState, useEffect } from "react";
 import Icon from "react-native-vector-icons/FontAwesome";
+import { Audio } from "expo-av"; // Import Audio API
 
 export default function PomoTime() {
   // Work Time & Break Time
@@ -9,6 +10,7 @@ export default function PomoTime() {
   const [seconds, setSeconds] = useState(workTime); //Timer Countdown
   const [isRunning, setIsRunning] = useState(false); //Clock Boolean
   const [isBreak, setIsBreak] = useState(false); //Break Boolean
+  const [sound, setSound] = useState<Audio.Sound | null > (null); // Lofi Music Sound
 
   const changeWorkTime = (newTime: number)=>{
     setWorkTime(newTime);
@@ -24,26 +26,57 @@ export default function PomoTime() {
       setIsRunning(false);
     }
   }
-  // Timer
+
+  // Function to Play Lofi Music
+  async function playMusic() {
+    if (sound) return; 
+
+    const { sound: newSound } = await Audio.Sound.createAsync(
+      { uri: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3" }, // Replace with lofi music URL
+      { shouldPlay: true, isLooping: true } // Auto-play and loop
+    );
+    setSound(newSound);
+    await newSound.playAsync();
+  }
+
+  // Function to Stop Music
+  async function stopMusic() {
+    if (sound) {
+      await sound.stopAsync();
+      await sound.unloadAsync();
+      setSound(null);
+    }
+  }
+
+  // Timer Logic
   useEffect(() => {
     let timer: NodeJS.Timeout | number | undefined;
 
-    if (isRunning && seconds > 0) {
-      timer = setInterval(() => {
-        setSeconds((prev) => prev - 1);
-      }, 1000);
-    } else if (seconds == 0) {
-      clearInterval(timer);
-      setIsRunning(false);
-      alert("Time to take a break.");
-      setSeconds(isBreak ? workTime : breakTime);
-      setIsBreak(!isBreak);
+    if (isRunning) {
+      if (!isBreak) {
+        playMusic(); // Only play music when work session starts
+      }
+
+      if (seconds > 0) {
+        timer = setInterval(() => {
+          setSeconds((prev) => prev - 1);
+        }, 1000);
+      } else {
+        clearInterval(timer);
+        setIsRunning(false);
+        stopMusic(); // Stop music when switching to break
+        alert("Time to take a break.");
+        setSeconds(isBreak ? workTime : breakTime);
+        setIsBreak(!isBreak);
+      }
+    } else {
+      stopMusic(); // Stop music if paused
     }
 
     return () => {
       if (timer) clearInterval(timer);
     };
-  }, [isRunning, seconds, workTime, breakTime]);
+  }, [isRunning, seconds]);
 
   const startTimer = () => setIsRunning(true);
   const pauseTimer = () => setIsRunning(false);
@@ -51,12 +84,15 @@ export default function PomoTime() {
     setIsRunning(false);
     setSeconds(workTime);
     setIsBreak(false);
+    stopMusic();
   };
+
   //Settings
   const [showSettings, setShowSetings] = useState(false);
 
   return (
     <View style={styles.container}>
+
       {/* Shuffle Button for Settings */}
       <TouchableOpacity style={styles.shuffleButton} onPress={()=> setShowSetings(!showSettings)}>
         <Icon name="random" size={30} color="white"/>
@@ -67,8 +103,8 @@ export default function PomoTime() {
         <View style={styles.settingsContainer}> 
         {/* Change Work Time Button */}
         <View style={styles.workContainer}>
-          <TouchableOpacity style={styles.workTimeButton} onPress={()=> changeWorkTime( 10 * 60 )}>
-            <Text style={styles.workTimeText}>10 min</Text>
+          <TouchableOpacity style={styles.workTimeButton} onPress={()=> changeWorkTime( 0.1 * 60 )}>
+            <Text style={styles.workTimeText}>0.06 min</Text>
           </TouchableOpacity>
           <TouchableOpacity style={styles.workTimeButton} onPress={()=> changeWorkTime( 25 * 60 )}>
             <Text style={styles.workTimeText}>25 min</Text>
@@ -80,6 +116,7 @@ export default function PomoTime() {
             <Text style={styles.workTimeText}>60 min</Text>
           </TouchableOpacity>
         </View>
+
         {/* Change Break Time */}
         <View style={styles.breakContainer}>
           <TouchableOpacity style={styles.breakTimeButton} onPress={()=> changeBreakTime ( 5 * 60 )}>
@@ -130,18 +167,18 @@ const styles = StyleSheet.create({
   shuffleButton: {
     position: "absolute",
     top: 20,
-    left: 15,
+    left: 10,
     backgroundColor: "transparent",
     padding: 10,
   },
   //Settings Container
   settingsContainer: {
     position: "absolute",
-    top: 80,
-    width: "90%",
-    alignSelf: "center",
+    top: 10, // Aligns with shuffle button
+    left: 80, // Aligns with shuffle button
     backgroundColor: "transparent",
-    alignItems:"center",
+    alignItems: "flex-start",
+    padding: 5,
   },
   //Work Button Container
   workContainer: {
